@@ -30,7 +30,7 @@ export default function Login() {
     setIsLoading(true);
     // Simulate API call
     setTimeout(() => {
-      login(email, 'John Doe');
+      login(email, 'Thanu');
       setIsLoading(false);
       toast.success('Welcome back!');
       navigate('/');
