@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from 'next-themes';
+import { useSearchParams } from 'react-router-dom';
+import { sendPasswordResetEmail, signOut } from 'firebase/auth';
+import { apiFetch } from '@/lib/api';
+import { auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Building2, 
   Save, 
-  Globe, 
   ShieldCheck,
   Smartphone,
   Moon,
   Sun,
   Upload,
-  User,
   Bell,
   Lock
 } from 'lucide-react';
-import { db } from '../db';
+
 import { type BusinessProfile } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +31,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 export default function Settings() {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
+  const { user, logout } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(searchParams.get('tab') || 'business');
   const [profile, setProfile] = useState<BusinessProfile>({
     name: '',
     gstin: '',
@@ -35,23 +41,155 @@ export default function Settings() {
     email: '',
     phone: ''
   });
+  const [preferences, setPreferences] = useState({
+    invoiceReminders: true,
+    overdueAlerts: true,
+    emailNotifications: true
+  });
+  const [invoiceStats, setInvoiceStats] = useState({ unpaid: 0, overdue: 0 });
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
-      const p = await db.profile.toCollection().first();
-      if (p) setProfile(p);
+      try {
+        const response = await apiFetch('/api/profile');
+        if (response.ok) {
+          const data = await response.json();
+          setProfile(data);
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
     };
+
+    const storedPrefs = localStorage.getItem('billing_notification_prefs');
+    if (storedPrefs) {
+      setPreferences(JSON.parse(storedPrefs));
+    }
+
+    const loadInvoiceStats = async () => {
+      try {
+        const response = await apiFetch('/api/invoices');
+        if (!response.ok) return;
+        const invoices = await response.json();
+        const unpaid = invoices.filter((invoice: any) => invoice.status === 'unpaid').length;
+        const overdue = invoices.filter((invoice: any) => invoice.status === 'overdue').length;
+        setInvoiceStats({ unpaid, overdue });
+      } catch (error) {
+        console.error('Error loading invoice stats:', error);
+      }
+    };
+
     loadProfile();
+    loadInvoiceStats();
   }, []);
+
+  useEffect(() => {
+    setTab(searchParams.get('tab') || 'business');
+  }, [searchParams]);
+
+  const handleSavePreferences = () => {
+    localStorage.setItem('billing_notification_prefs', JSON.stringify(preferences));
+    toast.success('Notification preferences saved');
+  };
+
+  const handlePasswordReset = async () => {
+    const emailAddress = profile.email || user?.email;
+    if (!emailAddress) {
+      toast.error('No email available for password reset');
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, emailAddress);
+      toast.success('Password reset email sent');
+    } catch (error: any) {
+      console.error('Password reset failed', error);
+      toast.error(error.message || 'Failed to send password reset email');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Delete your account and all stored data? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await apiFetch('/api/profile', { method: 'DELETE' });
+      await signOut(auth);
+      logout();
+      localStorage.removeItem('token');
+      localStorage.removeItem('billing_user');
+      toast.success('Account deleted successfully');
+      window.location.href = '/login';
+    } catch (error: any) {
+      console.error('Delete account failed', error);
+      toast.error(error.message || 'Failed to delete account');
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (max 1MB)
+    const maxSize = 1 * 1024 * 1024; // 1MB in bytes
+    if (file.size > maxSize) {
+      toast.error("Image size must be less than 1MB");
+      return;
+    }
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        let base64 = event.target?.result as string;
+
+        // If base64 is still too large after reading, compress it
+        if (base64.length > 800000) {
+          toast.error("Image is too large. Please use a smaller image.");
+          return;
+        }
+
+        const updatedProfile = { ...profile, logo: base64 };
+        setProfile(updatedProfile);
+
+        await apiFetch('/api/profile', {
+          method: 'POST',
+          body: JSON.stringify(updatedProfile)
+        });
+
+        toast.success("Logo updated successfully");
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      toast.error("Failed to upload logo");
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    try {
+      const updatedProfile = { ...profile, logo: undefined };
+      setProfile(updatedProfile);
+
+      await apiFetch('/api/profile', {
+        method: 'POST',
+        body: JSON.stringify(updatedProfile)
+      });
+
+      toast.success("Logo removed successfully");
+    } catch (err) {
+      toast.error("Failed to remove logo");
+    }
+  };
 
   const handleSaveProfile = async () => {
     try {
-      const existing = await db.profile.toCollection().first();
-      if (existing) {
-        await db.profile.update(existing.id!, profile);
-      } else {
-        await db.profile.add(profile);
-      }
+      const response = await apiFetch('/api/profile', {
+        method: 'POST',
+        body: JSON.stringify(profile)
+      });
+      const data = await response.json();
+      setProfile(data);
       toast.success("Business profile updated successfully");
     } catch (err) {
       toast.error("Failed to save profile");
@@ -65,7 +203,7 @@ export default function Settings() {
         <p className="text-slate-500 dark:text-slate-400 mt-1">Manage your business profile and app preferences.</p>
       </div>
 
-      <Tabs defaultValue="business" className="space-y-8">
+      <Tabs key={tab} defaultValue={tab} className="space-y-8">
         <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 no-scrollbar">
           <TabsList className="bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-100 dark:border-slate-800 h-14 shadow-sm w-max md:w-full">
             <TabsTrigger value="business" className="rounded-xl px-6 md:px-8 h-full data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-600/20">
@@ -98,16 +236,23 @@ export default function Settings() {
                         <AvatarImage src={profile.logo || `https://api.dicebear.com/7.x/initials/svg?seed=${profile.name}`} />
                         <AvatarFallback className="rounded-3xl text-4xl">{profile.name?.charAt(0)}</AvatarFallback>
                       </Avatar>
-                      <Button size="icon" variant="secondary" className="absolute -bottom-2 -right-2 rounded-xl shadow-lg">
+                      <Button size="icon" variant="secondary" className="absolute -bottom-2 -right-2 rounded-xl shadow-lg" onClick={() => fileInputRef.current?.click()}>
                         <Upload className="w-4 h-4" />
                       </Button>
+                      <input 
+                        ref={fileInputRef} 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
                     </div>
                     <div className="flex-1 text-center md:text-left space-y-2">
                       <h3 className="text-xl font-bold text-slate-900 dark:text-white">Company Logo</h3>
                       <p className="text-sm text-slate-500 dark:text-slate-400">Upload your company logo for professional branding. Recommended size: 512x512px.</p>
                       <div className="flex gap-2 justify-center md:justify-start pt-2">
-                        <Button variant="outline" size="sm" className="rounded-lg">Upload New</Button>
-                        <Button variant="ghost" size="sm" className="rounded-lg text-rose-600 hover:text-rose-700">Remove</Button>
+                        <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm" className="rounded-lg">Upload New</Button>
+                        <Button onClick={handleLogoRemove} variant="ghost" size="sm" className="rounded-lg text-rose-600 hover:text-rose-700">Remove</Button>
                       </div>
                     </div>
                   </div>
@@ -247,6 +392,91 @@ export default function Settings() {
                       <SelectItem value="hi">हिन्दी (Hindi)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications" className="space-y-8 animate-in slide-in-from-bottom-4">
+          <Card className="glass-card border-none max-w-2xl">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Notification Preferences</CardTitle>
+              <CardDescription>Control how and when you receive notifications.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-white">Invoice Reminders</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Get notified about unpaid invoices ({invoiceStats.unpaid})</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.invoiceReminders}
+                    onChange={() => setPreferences(prev => ({ ...prev, invoiceReminders: !prev.invoiceReminders }))}
+                    className="w-5 h-5 rounded"
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-white">Overdue Alerts</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Alert when invoices become overdue ({invoiceStats.overdue})</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.overdueAlerts}
+                    onChange={() => setPreferences(prev => ({ ...prev, overdueAlerts: !prev.overdueAlerts }))}
+                    className="w-5 h-5 rounded"
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                  <div>
+                    <p className="font-semibold text-slate-900 dark:text-white">Email Notifications</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Send updates to {profile.email || user?.email || 'your email'}</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={preferences.emailNotifications}
+                    onChange={() => setPreferences(prev => ({ ...prev, emailNotifications: !prev.emailNotifications }))}
+                    className="w-5 h-5 rounded"
+                  />
+                </div>
+              </div>
+              <div className="pt-6 flex justify-end border-t border-slate-100 dark:border-slate-800">
+                <Button onClick={handleSavePreferences} className="bg-indigo-600 hover:bg-indigo-700 gap-2 h-11 px-8 rounded-xl">
+                  <Save className="w-4 h-4" /> Save Preferences
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="security" className="space-y-8 animate-in slide-in-from-bottom-4">
+          <Card className="glass-card border-none max-w-2xl">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Security Settings</CardTitle>
+              <CardDescription>Keep your account safe and secure.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-white">Password</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Reset your password securely with email confirmation</p>
+                    </div>
+                  </div>
+                  <Button onClick={handlePasswordReset} variant="outline" size="sm" className="rounded-lg">Change Password</Button>
+                </div>
+                <div className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-rose-50 dark:bg-rose-900/10 border-rose-100 dark:border-rose-900/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-semibold text-rose-900 dark:text-rose-400">Delete Account</p>
+                      <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">Permanently delete your account and all data</p>
+                    </div>
+                  </div>
+                  <Button onClick={handleDeleteAccount} variant="ghost" size="sm" className="rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/20">Delete Account</Button>
                 </div>
               </div>
             </CardContent>

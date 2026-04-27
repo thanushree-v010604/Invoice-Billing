@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+
 import { useTranslation } from 'react-i18next';
+import { apiFetch } from "@/lib/api";
 import { 
   Search, 
   MoreVertical, 
@@ -14,7 +15,7 @@ import {
   Eye,
   ArrowUpDown
 } from 'lucide-react';
-import { db } from '../db';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -69,36 +70,102 @@ export default function InvoiceList() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const invoices = useLiveQuery(() => 
-    db.invoices
-      .filter(inv => {
-        const matchesSearch = inv.customerName.toLowerCase().includes(search.toLowerCase()) || 
-                             inv.invoiceNumber.toLowerCase().includes(search.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
-        return matchesSearch && matchesStatus;
-      })
-      .toArray()
-  , [search, statusFilter]) || [];
+  const filteredInvoices = invoices.filter(inv => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      [inv.invoiceNumber, inv.customerName, inv.customerGstin, inv.customerEmail, inv.customerPhone]
+        .some(field => field?.toString().toLowerCase().includes(query));
 
-  const handleDelete = async (id: number) => {
-    if (confirm("Are you sure you want to delete this invoice?")) {
-      await db.invoices.delete(id);
-      toast.success("Invoice deleted successfully");
+    const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  useEffect(() => {
+  const loadInvoices = async () => {
+    try {
+      const response = await apiFetch("http://localhost:5000/api/invoices");
+      const data = await response.json();
+
+      // map MongoDB _id → id (VERY IMPORTANT)
+      const formatted = data.map((inv: any) => ({
+        ...inv,
+        id: inv._id
+      }));
+
+      setInvoices(formatted);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
     }
   };
 
-  const handleDownload = async (id: number) => {
-    const inv = await db.invoices.get(id);
-    const profile = await db.profile.toCollection().first();
-    if (inv && profile) {
+  loadInvoices();
+}, []);
+ 
+  const handleDelete = async (id: string) => {
+  if (confirm("Are you sure you want to delete this invoice?")) {
+    try {
+      await apiFetch(`http://localhost:5000/api/invoices/${id}`, {
+  method: "DELETE"
+});
+
+      toast.success("Invoice deleted successfully");
+
+      // refresh list
+      setInvoices(prev => prev.filter(inv => inv.id !== id));
+
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error("Failed to delete invoice");
+    }
+  }
+};
+
+ const handleDownload = async (id: string) => {
+  try {
+    // Fetch specific invoice from backend
+    const res = await apiFetch(`http://localhost:5000/api/invoices/${id}`);
+
+    if (!res.ok) {
+      throw new Error('Failed to fetch invoice');
+    }
+
+    const inv = await res.json();
+
+    // Fetch profile from backend
+    let profile = {
+      name: "Your Business Name",
+      address: "",
+      gstin: "",
+      email: "",
+      phone: ""
+    };
+
+    try {
+      const profileRes = await apiFetch('http://localhost:5000/api/profile');
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        profile = profileData;
+      }
+    } catch (err) {
+      console.warn('Using default profile');
+    }
+
+    if (inv) {
       await generateInvoicePDF(inv, profile);
       toast.success("PDF generated successfully");
     } else {
-      toast.error("Profile or Invoice not found");
+      toast.error("Invoice not found");
     }
-  };
+  } catch (error) {
+    console.error("Download error:", error);
+    toast.error("Failed to generate PDF");
+  }
+};
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -150,6 +217,13 @@ export default function InvoiceList() {
               >
                 Unpaid
               </Button>
+              <Button 
+                variant={statusFilter === 'overdue' ? 'secondary' : 'ghost'} 
+                onClick={() => setStatusFilter('overdue')}
+                className="rounded-xl"
+              >
+                Overdue
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -172,7 +246,7 @@ export default function InvoiceList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.map((inv) => (
+                {filteredInvoices.map((inv) => (
                   <TableRow key={inv.id} className="group hover:bg-slate-50/30 dark:hover:bg-slate-900/30 transition-colors border-slate-50 dark:border-slate-900">
                     <TableCell className="px-6 py-4 font-semibold text-indigo-600 dark:text-indigo-400">
                       {inv.invoiceNumber}
@@ -182,10 +256,10 @@ export default function InvoiceList() {
                       <div className="text-xs text-slate-500 dark:text-slate-400">{inv.customerGstin || 'No GSTIN'}</div>
                     </TableCell>
                     <TableCell className="px-6 py-4 text-slate-500 dark:text-slate-400">
-                      {format(new Date(inv.date), 'dd MMM yyyy')}
+                     {format(new Date(inv.date || Date.now()), 'dd MMM yyyy')}
                     </TableCell>
                     <TableCell className="px-6 py-4 text-right font-bold text-slate-900 dark:text-white">
-                      ₹{inv.grandTotal.toLocaleString()}
+                     ₹{(inv.grandTotal || 0).toLocaleString()}
                     </TableCell>
                     <TableCell className="px-6 py-4">
                       <Badge className={`
@@ -194,7 +268,7 @@ export default function InvoiceList() {
                           inv.status === 'unpaid' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' : 
                           'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400'}
                       `}>
-                        {inv.status.toUpperCase()}
+                        {(inv.status || "unknown").toUpperCase()}
                       </Badge>
                     </TableCell>
                     <TableCell className="px-6 py-4">
@@ -208,7 +282,7 @@ export default function InvoiceList() {
 
           {/* Mobile Card Layout */}
           <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
-            {invoices.map((inv) => (
+            {filteredInvoices.map((inv) => (
               <div key={inv.id} className="p-4 space-y-3 active:bg-slate-50 dark:active:bg-slate-900 transition-colors">
                 <div className="flex justify-between items-start">
                   <div onClick={() => navigate(`/preview/${inv.id}`)} className="cursor-pointer">
@@ -227,13 +301,13 @@ export default function InvoiceList() {
                   `}>
                     {inv.status.toUpperCase()}
                   </Badge>
-                  <p className="font-black text-slate-900 dark:text-white">₹{inv.grandTotal.toLocaleString()}</p>
+                  <p className="font-black text-slate-900 dark:text-white">₹{(inv.grandTotal || 0).toLocaleString()}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          {invoices.length === 0 && (
+          {filteredInvoices.length === 0 && (
             <div className="text-center py-24 text-slate-400">
               <div className="bg-slate-50 dark:bg-slate-900 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <FileText className="w-10 h-10 opacity-20" />

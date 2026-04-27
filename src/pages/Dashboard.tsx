@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
+import { apiFetch } from '@/lib/api';
 import { 
   TrendingUp, 
   Clock, 
@@ -12,7 +12,7 @@ import {
   FileText,
   BarChart3
 } from 'lucide-react';
-import { db } from '../db';
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,12 +28,36 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { format } from 'date-fns';
+import { format, eachMonthOfInterval, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 export default function Dashboard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const invoices = useLiveQuery(() => db.invoices.toArray()) || [];
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadInvoices = async () => {
+      try {
+        const response = await apiFetch('http://localhost:5000/api/invoices');
+        const data = await response.json();
+        
+        // Map MongoDB _id to id
+        const formatted = data.map((inv: any) => ({
+          ...inv,
+          id: inv._id
+        }));
+        
+        setInvoices(formatted);
+      } catch (error) {
+        console.error('Error loading invoices:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInvoices();
+  }, []);
   
   const totalRevenue = invoices.reduce((sum, inv) => sum + inv.grandTotal, 0);
   const totalGst = invoices.reduce((sum, inv) => sum + inv.totalGst, 0);
@@ -43,13 +67,32 @@ export default function Dashboard() {
   const paidCount = invoices.filter(inv => inv.status === 'paid').length;
   const pendingCount = invoices.length - paidCount;
 
-  const chartData = invoices
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(-7)
-    .map(inv => ({
-      name: format(new Date(inv.date), 'dd MMM'),
-      total: inv.grandTotal
-    }));
+  const months = eachMonthOfInterval({
+    start: subMonths(new Date(), 5),
+    end: new Date()
+  });
+
+  const chartData = months.map(month => {
+    const monthStart = startOfMonth(month);
+    const monthEnd = endOfMonth(month);
+    const monthInvoices = invoices.filter(inv => {
+      const date = new Date(inv.date);
+      return !isNaN(date.getTime()) && date >= monthStart && date <= monthEnd;
+    });
+
+    return {
+      name: format(month, 'MMM'),
+      total: monthInvoices.reduce((sum, inv) => sum + inv.grandTotal, 0)
+    };
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -108,7 +151,7 @@ export default function Dashboard() {
             <CardDescription>Visual trend of your earnings over time.</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] pt-4">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={350}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis 

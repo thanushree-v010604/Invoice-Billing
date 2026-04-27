@@ -3,11 +3,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 interface User {
   email: string;
   name: string;
+  photoURL?: string;
+  phone?: string;
+  location?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, name: string) => void;
+  login: (user: User) => void;
+  updateProfile: (updates: Partial<User>) => void;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -24,10 +28,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = (email: string, name: string) => {
-    const newUser = { email, name };
+  const login = (userData: User) => {
+    const newUser = {
+      email: userData.email,
+      name: userData.name,
+      photoURL: userData.photoURL || '',
+      phone: userData.phone || '',
+      location: userData.location || ''
+    };
     setUser(newUser);
     localStorage.setItem('billing_user', JSON.stringify(newUser));
+  };
+
+  const updateProfile = (updates: Partial<User>) => {
+    if (!user) return;
+    const nextUser = { ...user, ...updates };
+    setUser(nextUser);
+    localStorage.setItem('billing_user', JSON.stringify(nextUser));
   };
 
   const logout = () => {
@@ -36,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, updateProfile, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

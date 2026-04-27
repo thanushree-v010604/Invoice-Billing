@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { apiFetch } from "@/lib/api";
 import { 
   Plus, 
   Trash2, 
@@ -12,7 +13,7 @@ import {
   ChevronLeft,
   Eye
 } from 'lucide-react';
-import { db } from '../db';
+
 import { type Invoice, type InvoiceItem, type BusinessProfile } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,29 +44,80 @@ export default function CreateInvoice() {
     notes: ''
   });
 
+  const statusTextClass = invoice.status === 'paid'
+    ? 'text-emerald-800 dark:text-emerald-300'
+    : invoice.status === 'unpaid'
+      ? 'text-amber-800 dark:text-amber-300'
+      : invoice.status === 'overdue'
+        ? 'text-rose-800 dark:text-rose-300'
+        : 'text-slate-900 dark:text-white';
+
   useEffect(() => {
-    const loadData = async () => {
-      const p = await db.profile.toCollection().first();
-      if (p) setProfile(p);
+  const loadData = async () => {
+    try {
+      // Load profile (optional for now)
+      // remove db usage if needed later
 
       if (id) {
-        const inv = await db.invoices.get(parseInt(id));
-        if (inv) setInvoice(inv);
+        const res = await apiFetch(`http://localhost:5000/api/invoices/${id}`);
+
+        if (!res.ok) {
+          throw new Error(`Failed to load invoice: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        const updatedItems = (data.items || []).map((item: any) => {
+          const amount = item.quantity * item.rate;
+          const gstAmount = (amount * (item.gstRate || 0)) / 100;
+          const total = amount + gstAmount;
+
+          return {
+            ...item,
+            amount,
+            cgst: gstAmount / 2,
+            sgst: gstAmount / 2,
+            total
+          };
+        });
+
+        const totals = calculateTotals(updatedItems);
+
+        setInvoice({
+          ...data,
+          items: updatedItems,
+          ...totals,
+          date: data.date ? new Date(data.date) : new Date(),
+          dueDate: data.dueDate ? new Date(data.dueDate) : new Date()
+        });
       }
-    };
-    loadData();
-  }, [id]);
+    } catch (error) {
+      console.error("Error loading invoice:", error);
+    }
+  };
+
+  loadData();
+}, [id]);
 
   const calculateTotals = (items: InvoiceItem[]) => {
-    const subTotal = items.reduce((sum, item) => sum + item.amount, 0);
-    const totalGst = items.reduce((sum, item) => sum + (item.cgst + item.sgst + item.igst), 0);
-    const grandTotal = subTotal + totalGst;
-    return { subTotal, totalGst, grandTotal };
-  };
+  const subTotal = items.reduce((sum, item) => {
+    return sum + (item.quantity * item.rate || 0);
+  }, 0);
+
+  const totalGst = items.reduce((sum, item) => {
+    const amount = item.quantity * item.rate || 0;
+    const gstAmount = (amount * (item.gstRate || 0)) / 100;
+    return sum + gstAmount;
+  }, 0);
+
+  const grandTotal = subTotal + totalGst;
+
+  return { subTotal, totalGst, grandTotal };
+};
 
   const addItem = () => {
     const newItem: InvoiceItem = {
-      id: Math.random().toString(36).substr(2, 9),
+     id: crypto.randomUUID(),
       description: '',
       hsnCode: '',
       quantity: 1,
@@ -114,20 +166,39 @@ export default function CreateInvoice() {
       return;
     }
 
-    try {
-      let savedId;
-      if (id) {
-        await db.invoices.update(parseInt(id), invoice);
-        savedId = parseInt(id);
-        toast.success("Invoice updated successfully");
-      } else {
-        savedId = await db.invoices.add(invoice);
-        toast.success("Invoice created successfully");
-      }
-      navigate(`/preview/${savedId}`);
-    } catch (err) {
-      toast.error("Failed to save invoice");
-    }
+    
+      try {
+  let savedInvoice;
+
+  if (id) {
+  const response = await apiFetch(`http://localhost:5000/api/invoices/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(invoice)
+  });
+
+  const data = await response.json();
+
+  toast.success("Invoice updated successfully");
+
+  navigate(`/preview/${data._id}`);
+  return;
+} else {
+    const response = await apiFetch("http://localhost:5000/api/invoices", {
+  method: "POST",
+  body: JSON.stringify(invoice)
+});
+
+    const data = await response.json();
+    savedInvoice = data;
+
+    toast.success("Invoice created successfully");
+  }
+
+  navigate(`/preview/${savedInvoice._id}`);
+
+} catch (err) {
+  toast.error("Failed to save invoice");
+}
   };
 
   return (
@@ -261,21 +332,15 @@ export default function CreateInvoice() {
                           />
                         </TableCell>
                         <TableCell className="text-right">
-                          <Select 
-                            value={item.gstRate.toString()} 
-                            onValueChange={v => updateItem(item.id, 'gstRate', parseInt(v))}
-                          >
-                            <SelectTrigger className="w-20 ml-auto border-none focus-visible:ring-1 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0">0%</SelectItem>
-                              <SelectItem value="5">5%</SelectItem>
-                              <SelectItem value="12">12%</SelectItem>
-                              <SelectItem value="18">18%</SelectItem>
-                              <SelectItem value="28">28%</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={item.gstRate}
+                            onChange={e => updateItem(item.id, 'gstRate', parseFloat(e.target.value) || 0)}
+                            className="w-24 ml-auto border-none focus-visible:ring-1 bg-slate-50/50 dark:bg-slate-800/50 text-right rounded-lg"
+                            placeholder="GST %"
+                          />
                         </TableCell>
                         <TableCell className="text-right font-semibold text-slate-900 dark:text-white">
                           ₹{item.total.toLocaleString()}
@@ -320,21 +385,15 @@ export default function CreateInvoice() {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px] uppercase text-slate-400">GST %</Label>
-                        <Select 
-                          value={item.gstRate.toString()} 
-                          onValueChange={v => updateItem(item.id, 'gstRate', parseInt(v))}
-                        >
-                          <SelectTrigger className="bg-white dark:bg-slate-800 h-10 rounded-xl">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">0%</SelectItem>
-                            <SelectItem value="5">5%</SelectItem>
-                            <SelectItem value="12">12%</SelectItem>
-                            <SelectItem value="18">18%</SelectItem>
-                            <SelectItem value="28">28%</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={item.gstRate}
+                          onChange={e => updateItem(item.id, 'gstRate', parseFloat(e.target.value) || 0)}
+                          className="bg-white dark:bg-slate-800 h-10 rounded-xl"
+                          placeholder="GST %"
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
@@ -359,7 +418,7 @@ export default function CreateInvoice() {
                       <div className="space-y-2">
                         <Label className="text-[10px] uppercase text-slate-400">Total</Label>
                         <div className="h-10 flex items-center font-bold text-slate-900 dark:text-white">
-                          ₹{item.total.toLocaleString()}
+                          ₹{(item.total || 0).toLocaleString()}
                         </div>
                       </div>
                     </div>
@@ -415,16 +474,28 @@ export default function CreateInvoice() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={invoice.status} onValueChange={v => setInvoice({...invoice, status: v as any})}>
-                  <SelectTrigger className="bg-white/50 dark:bg-slate-900/50 h-11 rounded-xl">
-                    <SelectValue />
+              <div className="space-y-2 bg-white/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+                <Label className="block text-slate-600 dark:text-slate-300">Status</Label>
+
+                <Select
+                  value={invoice.status}
+                  onValueChange={v => setInvoice({...invoice, status: v as any})}
+                >
+                  <SelectTrigger className={`w-full border h-11 rounded-xl px-3 text-sm font-semibold ${
+                    invoice.status === 'paid'
+                      ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20'
+                      : invoice.status === 'unpaid'
+                        ? 'border-amber-200 bg-amber-50 dark:bg-amber-900/20'
+                        : invoice.status === 'overdue'
+                          ? 'border-rose-200 bg-rose-50 dark:bg-rose-900/20'
+                          : 'border-slate-200 bg-white/50 dark:border-slate-800 dark:bg-slate-900/50'
+                  }`}>
+                    <SelectValue className={`${statusTextClass} block`} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="paid">PAID</SelectItem>
-                    <SelectItem value="unpaid">UNPAID</SelectItem>
-                    <SelectItem value="overdue">OVERDUE</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

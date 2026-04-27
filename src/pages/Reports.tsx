@@ -1,6 +1,6 @@
-import React from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { apiFetch } from '@/lib/api';
 import { 
   PieChart as PieChartIcon, 
   BarChart as BarChartIcon,
@@ -12,7 +12,7 @@ import {
   ArrowUpRight,
   ArrowDownRight
 } from 'lucide-react';
-import { db } from '../db';
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -34,10 +34,27 @@ import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from
 
 export default function Reports() {
   const { t } = useTranslation();
-  const invoices = useLiveQuery(() => db.invoices.toArray()) || [];
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadInvoices = async () => {
+      try {
+        const response = await apiFetch('http://localhost:5000/api/invoices');
+        const data = await response.json();
+        setInvoices(data);
+      } catch (error) {
+        console.error('Error loading invoices:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInvoices();
+  }, []);
 
   const statusData = [
-    { name: 'Paid', value: invoices.filter(i => i.status === 'paid').length, color: '#10b981' },
+    { name: 'Paid', value: invoices.filter(i => i.status === 'paid').length, color: '#243630' },
     { name: 'Unpaid', value: invoices.filter(i => i.status === 'unpaid').length, color: '#f59e0b' },
     { name: 'Overdue', value: invoices.filter(i => i.status === 'overdue').length, color: '#f43f5e' },
   ].filter(d => d.value > 0);
@@ -61,15 +78,60 @@ export default function Reports() {
     };
   });
 
+  const uniqueCustomers = new Set(invoices.map(inv => inv.customerName)).size;
+
   const topCustomers = Object.entries(
     invoices.reduce((acc, inv) => {
       acc[inv.customerName] = (acc[inv.customerName] || 0) + inv.grandTotal;
       return acc;
     }, {} as Record<string, number>)
   )
-    .sort(([, a], [, b]) => b - a)
+    .sort(([, a], [, b]) => (Number(b) || 0) - (Number(a) || 0))
     .slice(0, 5)
     .map(([name, total]) => ({ name, total }));
+
+  const formatInvoiceDate = (value: any) => {
+    const date = value ? new Date(value) : null;
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+      return '-';
+    }
+    return `'${format(date, 'dd MMM yyyy')}`;
+  };
+
+  const handleExportData = () => {
+    // Export as CSV
+    const headers = ['Invoice #', 'Customer', 'Date', 'Amount', 'GST', 'Total', 'Status'];
+    const rows = invoices.map(inv => [
+      inv.invoiceNumber,
+      inv.customerName,
+      formatInvoiceDate(inv.date),
+      inv.subTotal,
+      inv.totalGst,
+      inv.grandTotal,
+      inv.status
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `invoices-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -82,7 +144,7 @@ export default function Reports() {
           <Button variant="outline" className="flex-1 md:flex-none gap-2 rounded-xl h-11">
             <CalendarIcon className="w-4 h-4" /> Last 6 Months
           </Button>
-          <Button className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 gap-2 rounded-xl h-11 shadow-lg shadow-indigo-600/20">
+          <Button onClick={handleExportData} className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 gap-2 rounded-xl h-11 shadow-lg shadow-indigo-600/20">
             <Download className="w-4 h-4" /> Export Data
           </Button>
         </div>
@@ -97,10 +159,10 @@ export default function Reports() {
           isUp={true}
         />
         <ReportStatCard 
-          title="Customer Growth" 
-          value="+24" 
+          title="Total Customers" 
+          value={uniqueCustomers.toString()} 
           icon={<Users className="text-emerald-500" />}
-          trend="+5.4%"
+          trend={uniqueCustomers > 0 ? `${Math.round((uniqueCustomers / Math.max(uniqueCustomers, 1)) * 100)}%` : '0%'}
           isUp={true}
         />
         <ReportStatCard 
@@ -216,7 +278,7 @@ export default function Reports() {
                   <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-1000"
-                      style={{ width: `${(customer.total / topCustomers[0].total) * 100}%` }}
+                      style={{ width: `${(Number(customer.total || 0) / Number(topCustomers[0]?.total || 1)) * 100}%` }}
                     ></div>
                   </div>
                 </div>

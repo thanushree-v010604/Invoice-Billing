@@ -42,9 +42,11 @@ export function DropdownMenu({ children }: { children: React.ReactNode }) {
 export function DropdownMenuTrigger({
   render,
   children,
+  asChild,
 }: {
   render?: React.ReactElement;
   children?: React.ReactNode;
+  asChild?: boolean;
 }) {
   const context = useContext(DropdownContext);
   if (!context) return null;
@@ -54,10 +56,19 @@ export function DropdownMenuTrigger({
   if (render && React.isValidElement(render)) {
     return React.cloneElement(render, {
       onClick: (event: React.MouseEvent) => {
-        render.props.onClick?.(event);
+        (render.props as any).onClick?.(event);
         handleClick();
       },
-    });
+    } as any);
+  }
+
+  if (asChild && React.isValidElement(children)) {
+    return React.cloneElement(children as React.ReactElement, {
+      onClick: (event: React.MouseEvent) => {
+        ((children as React.ReactElement).props as any).onClick?.(event);
+        handleClick();
+      },
+    } as any);
   }
 
   return (
@@ -104,17 +115,20 @@ export function DropdownMenuSeparator({ className }: { className?: string }) {
   return <div className={twMerge('my-2 h-px bg-slate-200 dark:bg-slate-800', className)} />;
 }
 
-export function DropdownMenuItem({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+export function DropdownMenuItem({ className, disabled, ...props }: React.HTMLAttributes<HTMLDivElement> & { disabled?: boolean }) {
   const context = useContext(DropdownContext);
   return (
     <div
       className={twMerge(
         'flex cursor-pointer select-none items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-900',
+        disabled && 'pointer-events-none opacity-50',
         className
       )}
       onClick={(event) => {
-        context?.close();
-        props.onClick?.(event as any);
+        if (!disabled) {
+          context?.close();
+          props.onClick?.(event as any);
+        }
       }}
       {...props}
     />

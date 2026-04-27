@@ -1,8 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
-import { AuthProvider } from './contexts/AuthContext';
 import { Toaster } from 'sonner';
+import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider } from './contexts/AuthContext';
 
 // Layouts
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -21,16 +22,21 @@ import './i18n';
 
 export default function App() {
   return (
-    /* @ts-ignore */
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <AuthProvider>
         <BrowserRouter>
           <Toaster position="top-right" richColors />
           <Routes>
             <Route path="/login" element={<Login />} />
-            
-            <Route element={<DashboardLayout />}>
+            <Route
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }
+            >
               <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/create" element={<CreateInvoice />} />
               <Route path="/edit/:id" element={<CreateInvoice />} />
               <Route path="/invoices" element={<InvoiceList />} />
@@ -39,8 +45,7 @@ export default function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/profile" element={<Profile />} />
             </Route>
-
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

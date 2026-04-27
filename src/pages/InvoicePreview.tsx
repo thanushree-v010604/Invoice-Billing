@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type {} from 'react/jsx-runtime';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Download, 
@@ -11,7 +12,8 @@ import {
   Clock,
   AlertCircle
 } from 'lucide-react';
-import { db } from '../db';
+
+import { apiFetch } from '@/lib/api';
 import { type Invoice, type BusinessProfile } from '../types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,24 +22,75 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { generateInvoicePDF } from '../lib/pdf';
+//import axios from "axios"; // add at top
+const safeDate = (date: any) => {
+  if (!date) return "N/A";
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? "N/A" : format(d, "dd MMM yyyy");
+};
 
 export default function InvoicePreview() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
+const [loading, setLoading] = useState(true); // ✅ ADD THIS
 
   useEffect(() => {
-    const loadData = async () => {
+  const loadData = async () => {
+    try {
       if (id) {
-        const inv = await db.invoices.get(parseInt(id));
-        if (inv) setInvoice(inv);
+        const res = await apiFetch(`http://localhost:5000/api/invoices/${id}`);
+
+        if (!res.ok) {
+          throw new Error(`Failed to load invoice: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        // map _id → id
+        setInvoice({
+          ...data,
+          id: data._id
+        });
       }
-      const p = await db.profile.toCollection().first();
-      if (p) setProfile(p);
-    };
-    loadData();
-  }, [id]);
+
+      // Fetch real profile from backend
+      try {
+        const profileRes = await apiFetch('http://localhost:5000/api/profile');
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          setProfile(profileData);
+        } else {
+          // Fallback to default
+          setProfile({
+            name: "Your Business Name",
+            address: "",
+            gstin: "",
+            email: "",
+            phone: ""
+          });
+        }
+      } catch (err) {
+        // Fallback to default
+        setProfile({
+          name: "Your Business Name",
+          address: "",
+          gstin: "",
+          email: "",
+          phone: ""
+        });
+      }
+
+    } catch (error) {
+      console.error("Error loading invoice:", error);
+    } finally {
+      setLoading(false); // ✅ IMPORTANT
+    }
+  };
+
+  loadData();
+}, [id]);
 
   const handleDownload = async () => {
     if (invoice && profile) {
@@ -49,7 +102,17 @@ export default function InvoicePreview() {
       }
     }
   };
+if (loading) {
+  return (
+    <div className="flex items-center justify-center h-[60vh]">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    </div>
+  );
+}
 
+if (!invoice || !profile) {
+  return <p>No invoice found</p>;
+}
   if (!invoice || !profile) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -81,16 +144,21 @@ export default function InvoicePreview() {
                   invoice.status === 'unpaid' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' : 
                   'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400'}
               `}>
-                {invoice.status.toUpperCase()}
+                {(invoice.status || "unknown").toUpperCase()}
               </Badge>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 mt-1">Issued on {format(new Date(invoice.date), 'dd MMM yyyy')}</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">Issued on {safeDate(invoice.date)}</p>
           </div>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
-          <Button variant="outline" onClick={() => navigate(`/edit/${id}`)} className="flex-1 md:flex-none gap-2 rounded-xl h-11">
-            <Edit className="w-4 h-4" /> Edit
-          </Button>
+        <Button
+                variant="outline"
+  onClick={() => navigate(`/edit/${id}`)}
+  className="flex-1 md:flex-none gap-2 rounded-xl h-11"
+>
+  <Edit className="w-4 h-4" />
+  Edit
+</Button>
           <Button onClick={handleDownload} className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 gap-2 rounded-xl h-11 shadow-lg shadow-indigo-600/20">
             <Download className="w-4 h-4" /> Download PDF
           </Button>
@@ -124,11 +192,11 @@ export default function InvoicePreview() {
                 <div className="grid grid-cols-2 md:block gap-4">
                   <div className="space-y-1">
                     <p className="text-xs text-slate-500 dark:text-slate-400">Date Issued</p>
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">{format(new Date(invoice.date), 'dd MMM yyyy')}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">{safeDate(invoice.date)}</p>
                   </div>
                   <div className="space-y-1 mt-2">
                     <p className="text-xs text-slate-500 dark:text-slate-400">Due Date</p>
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">{format(new Date(invoice.dueDate), 'dd MMM yyyy')}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">{safeDate(invoice.dueDate)}</p>
                   </div>
                 </div>
               </div>
@@ -143,7 +211,7 @@ export default function InvoicePreview() {
               </div>
               <div className="flex flex-col justify-end text-left md:text-right">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Total Amount Due</p>
-                <p className="text-4xl font-black gradient-text">₹{invoice.grandTotal.toLocaleString()}</p>
+                <p className="text-4xl font-black gradient-text">₹{(invoice.grandTotal || 0).toLocaleString()}</p>
               </div>
             </div>
 
@@ -160,16 +228,16 @@ export default function InvoicePreview() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoice.items.map((item, index) => (
+                  {(invoice.items || []).map((item, index) => (
                     <TableRow key={index} className="border-slate-100 dark:border-slate-900">
                       <TableCell className="py-4">
                         <p className="font-medium text-slate-900 dark:text-white">{item.description}</p>
                       </TableCell>
                       <TableCell className="text-slate-500 dark:text-slate-400">{item.hsnCode}</TableCell>
                       <TableCell className="text-right text-slate-700 dark:text-slate-300">{item.quantity}</TableCell>
-                      <TableCell className="text-right text-slate-700 dark:text-slate-300">₹{item.rate.toLocaleString()}</TableCell>
+                      <TableCell className="text-right text-slate-700 dark:text-slate-300">₹{(item.rate || 0).toLocaleString()}</TableCell>
                       <TableCell className="text-right text-slate-700 dark:text-slate-300">{item.gstRate}%</TableCell>
-                      <TableCell className="text-right font-bold text-slate-900 dark:text-white">₹{item.total.toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-bold text-slate-900 dark:text-white">₹{(item.total || 0).toLocaleString()}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -188,15 +256,15 @@ export default function InvoicePreview() {
               <div className="w-full md:w-72 space-y-3">
                 <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                   <span>Subtotal</span>
-                  <span className="font-medium text-slate-900 dark:text-white">₹{invoice.subTotal.toLocaleString()}</span>
+                  <span className="font-medium text-slate-900 dark:text-white">₹{(invoice.subTotal || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                   <span>Total GST</span>
-                  <span className="font-medium text-slate-900 dark:text-white">₹{invoice.totalGst.toLocaleString()}</span>
+                  <span className="font-medium text-slate-900 dark:text-white">₹{(invoice.totalGst || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-xl font-black text-slate-900 dark:text-white pt-4 border-t border-slate-200 dark:border-slate-800">
                   <span>Total</span>
-                  <span className="text-indigo-600 dark:text-indigo-400">₹{invoice.grandTotal.toLocaleString()}</span>
+                  <span className="text-indigo-600 dark:text-indigo-400">₹{(invoice.grandTotal || 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -240,7 +308,7 @@ export default function InvoicePreview() {
                 <div className="relative">
                   <div className="absolute -left-[25px] top-1 w-4 h-4 rounded-full bg-indigo-600 border-4 border-white dark:border-slate-950 shadow-sm"></div>
                   <p className="text-sm font-bold text-slate-900 dark:text-white">Invoice Created</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{format(new Date(invoice.date), 'dd MMM yyyy, hh:mm a')}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{safeDate(invoice.date)}</p>
                 </div>
                 <div className="relative">
                   <div className="absolute -left-[25px] top-1 w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-800 border-4 border-white dark:border-slate-950 shadow-sm"></div>
