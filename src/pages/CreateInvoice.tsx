@@ -23,7 +23,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-
 export default function CreateInvoice() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -332,16 +331,21 @@ export default function CreateInvoice() {
                           />
                         </TableCell>
                         <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={item.gstRate}
-                            onChange={e => updateItem(item.id, 'gstRate', parseFloat(e.target.value) || 0)}
-                            className="w-24 ml-auto border-none focus-visible:ring-1 bg-slate-50/50 dark:bg-slate-800/50 text-right rounded-lg"
-                            placeholder="GST %"
-                          />
-                        </TableCell>
+  <div className="flex items-center justify-end gap-1">
+        <Input
+      type="number"
+      value={item.gstRate}
+      min={0}
+      max={100}
+      onChange={e =>
+        updateItem(item.id, 'gstRate', parseFloat(e.target.value) || 0)
+      }
+      className="w-16 text-center bg-slate-50/50 dark:bg-slate-800/50 border-none"
+    />
+
+    <span className="text-xs text-slate-400">%</span>
+  </div>
+</TableCell>
                         <TableCell className="text-right font-semibold text-slate-900 dark:text-white">
                           ₹{item.total.toLocaleString()}
                         </TableCell>
@@ -385,15 +389,19 @@ export default function CreateInvoice() {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px] uppercase text-slate-400">GST %</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={item.gstRate}
-                          onChange={e => updateItem(item.id, 'gstRate', parseFloat(e.target.value) || 0)}
-                          className="bg-white dark:bg-slate-800 h-10 rounded-xl"
-                          placeholder="GST %"
-                        />
+                       <div className="flex items-center gap-2">
+  <Input
+    type="number"
+    value={item.gstRate}
+    min={0}
+    max={100}
+    onChange={e =>
+      updateItem(item.id, 'gstRate', parseFloat(e.target.value) || 0)
+    }
+    className="bg-white dark:bg-slate-800 h-10 rounded-xl text-center"
+  />
+  <span className="text-sm text-slate-400">%</span>
+</div>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
