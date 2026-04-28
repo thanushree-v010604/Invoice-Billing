@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const express = require('express');
