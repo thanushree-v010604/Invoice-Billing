@@ -39,7 +39,7 @@ export default function Dashboard() {
   useEffect(() => {
     const loadInvoices = async () => {
       try {
-        const response = await apiFetch('https://invoice-backend-siqh.onrender.com');
+        const response = await apiFetch('https://invoice-backend-siqh.onrender.com/api/invoices');
         const data = await response.json();
         
         // Map MongoDB _id to id

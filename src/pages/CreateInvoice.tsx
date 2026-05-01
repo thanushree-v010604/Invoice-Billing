@@ -58,7 +58,7 @@ export default function CreateInvoice() {
       // remove db usage if needed later
 
       if (id) {
-        const res = await apiFetch(`https://invoice-backend-siqh.onrender.com`);
+        const res = await apiFetch(`https://invoice-backend-siqh.onrender.com/api/invoices`);
 
         if (!res.ok) {
           throw new Error(`Failed to load invoice: ${res.status}`);
@@ -170,7 +170,7 @@ export default function CreateInvoice() {
   let savedInvoice;
 
   if (id) {
-  const response = await apiFetch(`https://invoice-backend-siqh.onrender.com`, {
+  const response = await apiFetch(`https://invoice-backend-siqh.onrender.com/api/invoices/${id}`, {
     method: "PUT",
     body: JSON.stringify(invoice)
   });
@@ -182,7 +182,7 @@ export default function CreateInvoice() {
   navigate(`/preview/${data._id}`);
   return;
 } else {
-    const response = await apiFetch("https://invoice-backend-siqh.onrender.com", {
+    const response = await apiFetch("https://invoice-backend-siqh.onrender.com/api/invoices", {
   method: "POST",
   body: JSON.stringify(invoice)
 });
