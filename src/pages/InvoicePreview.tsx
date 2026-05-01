@@ -40,7 +40,7 @@ const [loading, setLoading] = useState(true); // ✅ ADD THIS
   const loadData = async () => {
     try {
       if (id) {
-        const res = await apiFetch(`http://localhost:5000/api/invoices/${id}`);
+        const res = await apiFetch(`https://invoice-backend-siqh.onrender.com`);
 
         if (!res.ok) {
           throw new Error(`Failed to load invoice: ${res.status}`);
@@ -57,7 +57,7 @@ const [loading, setLoading] = useState(true); // ✅ ADD THIS
 
       // Fetch real profile from backend
       try {
-        const profileRes = await apiFetch('http://localhost:5000/api/profile');
+        const profileRes = await apiFetch('https://invoice-backend-siqh.onrender.com');
         if (profileRes.ok) {
           const profileData = await profileRes.json();
           setProfile(profileData);

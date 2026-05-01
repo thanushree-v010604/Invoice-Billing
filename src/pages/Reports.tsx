@@ -40,7 +40,7 @@ export default function Reports() {
   useEffect(() => {
     const loadInvoices = async () => {
       try {
-        const response = await apiFetch('http://localhost:5000/api/invoices');
+        const response = await apiFetch('https://invoice-backend-siqh.onrender.com');
         const data = await response.json();
         setInvoices(data);
       } catch (error) {

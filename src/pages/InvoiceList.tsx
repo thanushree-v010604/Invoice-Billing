@@ -88,7 +88,7 @@ export default function InvoiceList() {
   useEffect(() => {
   const loadInvoices = async () => {
     try {
-      const response = await apiFetch("http://localhost:5000/api/invoices");
+      const response = await apiFetch("https://invoice-backend-siqh.onrender.com");
       const data = await response.json();
 
       // map MongoDB _id → id (VERY IMPORTANT)
@@ -109,7 +109,7 @@ export default function InvoiceList() {
   const handleDelete = async (id: string) => {
   if (confirm("Are you sure you want to delete this invoice?")) {
     try {
-      await apiFetch(`http://localhost:5000/api/invoices/${id}`, {
+      await apiFetch(`https://invoice-backend-siqh.onrender.com`, {
   method: "DELETE"
 });
 
@@ -128,7 +128,7 @@ export default function InvoiceList() {
  const handleDownload = async (id: string) => {
   try {
     // Fetch specific invoice from backend
-    const res = await apiFetch(`http://localhost:5000/api/invoices/${id}`);
+    const res = await apiFetch(`https://invoice-backend-siqh.onrender.com`);
 
     if (!res.ok) {
       throw new Error('Failed to fetch invoice');
@@ -146,7 +146,7 @@ export default function InvoiceList() {
     };
 
     try {
-      const profileRes = await apiFetch('http://localhost:5000/api/profile');
+      const profileRes = await apiFetch('https://invoice-backend-siqh.onrender.com');
       if (profileRes.ok) {
         const profileData = await profileRes.json();
         profile = profileData;
