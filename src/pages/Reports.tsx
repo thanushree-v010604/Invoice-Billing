@@ -40,7 +40,12 @@ export default function Reports() {
   useEffect(() => {
     const loadInvoices = async () => {
       try {
-        const response = await apiFetch('https://invoice-backend-siqh.onrender.com/api/invoices');
+        const response = await apiFetch('/api/invoices');
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch invoices: ${response.status}`);
+        }
+        
         const data = await response.json();
         setInvoices(data);
       } catch (error) {
@@ -88,7 +93,7 @@ export default function Reports() {
   )
     .sort(([, a], [, b]) => (Number(b) || 0) - (Number(a) || 0))
     .slice(0, 5)
-    .map(([name, total]) => ({ name, total }));
+    .map(([name, total]) => ({ name, total: Number(total) }));
 
   const formatInvoiceDate = (value: any) => {
     const date = value ? new Date(value) : null;

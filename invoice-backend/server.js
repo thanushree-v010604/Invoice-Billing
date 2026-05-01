@@ -10,7 +10,6 @@ const app = express();
 // ✅ CORS (ONLY ONCE)
 app.use(cors({
   origin: [
-    "http://localhost:3000",
     "https://invoice-billing-v6xt.onrender.com"
   ],
   credentials: true
