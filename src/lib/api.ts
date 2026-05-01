@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000';
+const API_BASE = 'https://invoice-backend-siqh.onrender.com';
 
 export const apiFetch = async (url: string, options: any = {}) => {
   const token = localStorage.getItem('token');
