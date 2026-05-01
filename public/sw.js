@@ -1,4 +1,4 @@
-const CACHE_NAME = 'billing-pro-v2';
+const CACHE_NAME = 'billing-pro-v3';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -9,9 +9,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(urlsToCache))
-      .catch(() => {}) // Handle errors gracefully
+      .catch(() => {})
   );
-  self.skipWaiting(); // Activate immediately
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -26,7 +26,7 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim(); // Take control immediately
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -34,42 +34,47 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   // Network-first for API calls
-  if (url.pathname.startsWith('/api/') || url.hostname !== 'localhost') {
+  if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
+          // Only cache successful responses
           if (response.ok) {
-            const cache = caches.open(CACHE_NAME);
-            cache.then((c) => c.put(request, response.clone()));
+            const clonedResponse = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, clonedResponse);
+            });
           }
           return response;
         })
-        .catch(() => {
-          return caches.match(request);
-        })
+        .catch(() => caches.match(request) || new Response('Network error', { status: 503 }))
     );
     return;
   }
 
-  // Cache-first for static assets
+  // Stale-while-revalidate for static assets
   event.respondWith(
     caches.match(request)
-      .then((response) => {
-        if (response) {
-          return response;
-        }
-        return fetch(request).then((response) => {
-          if (!response || response.status !== 200) {
-            return response;
+      .then((cachedResponse) => {
+        const fetchPromise = fetch(request).then((response) => {
+          // Only cache successful responses
+          if (response.ok && response.type === 'basic') {
+            const clonedResponse = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, clonedResponse);
+            });
           }
-          const cache = caches.open(CACHE_NAME);
-          cache.then((c) => c.put(request, response.clone()));
           return response;
         });
+
+        return cachedResponse || fetchPromise;
       })
       .catch(() => {
-        // Return index.html for SPA routing
-        return caches.match('/index.html');
+        // Return index.html for SPA routing on failed navigation
+        if (request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+        return new Response('Offline', { status: 503 });
       })
   );
 });
