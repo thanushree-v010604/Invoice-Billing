@@ -1,4 +1,4 @@
-const CACHE_NAME = 'billing-pro-v3';
+const CACHE_NAME = 'billing-pro-v4';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -33,12 +33,17 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Don't cache non-GET requests (PUT, POST, DELETE, etc)
+  if (request.method !== 'GET') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // Network-first for API calls
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Only cache successful responses
           if (response.ok) {
             const clonedResponse = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -57,7 +62,6 @@ self.addEventListener('fetch', (event) => {
     caches.match(request)
       .then((cachedResponse) => {
         const fetchPromise = fetch(request).then((response) => {
-          // Only cache successful responses
           if (response.ok && response.type === 'basic') {
             const clonedResponse = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
