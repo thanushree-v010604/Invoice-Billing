@@ -54,11 +54,8 @@ export default function CreateInvoice() {
   useEffect(() => {
   const loadData = async () => {
     try {
-      // Load profile (optional for now)
-      // remove db usage if needed later
-
       if (id) {
-        const res = await apiFetch(`/api/invoices`);
+        const res = await apiFetch(`/api/invoices/${id}`);
 
         if (!res.ok) {
           throw new Error(`Failed to load invoice: ${res.status}`);
