@@ -1,10 +1,4 @@
-
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/2a033ce5-5fe0-4344-a09c-026c79ff4b51
-
+Invoice and Billing Management System
 ## Run Locally
 
 **Prerequisites:**  Node.js
