@@ -20,6 +20,10 @@ The application combines a responsive frontend with a powerful backend to secure
 - 📂 Invoice Management
 - 📊 Dashboard Analytics
 - 📈 Reports & Statistics
+- 📄 Export Invoice as PDF
+- 🌙 Dark Mode
+- 🔔 Payment Reminder Notifications
+- 📱 Mobile Application
 - 👤 User Profile
 - ⚙️ Account Settings
 - 🌐 Responsive User Interface
@@ -45,7 +49,7 @@ The application combines a responsive frontend with a powerful backend to secure
 1. 🔐 User logs into the application.
 2. 👥 Manage customer information.
 3. 🧾 Create a new invoice.
-4. 💰 Generate bills automatically.
+4. 💰 Generate bills automaticallyand download the bill in pdf format.
 5. 📂 Store invoice records securely.
 6. 📊 View dashboard statistics.
 7. 📈 Generate business reports.
@@ -116,7 +120,7 @@ The primary objective of this project is to simplify invoice and billing managem
 
 ---
 
-# 💻 Application Screenshots
+# 💻Website Screenshots
 
 ## 🔐 Login
 
@@ -215,14 +219,10 @@ Manage user profile information and account details.
 ---
 # 🚀 Future Enhancements
 
-- 📄 Export Invoice as PDF
 - 📧 Email Invoice to Customers
 - 💳 Online Payment Gateway
-- 🔔 Payment Reminder Notifications
-- 🌙 Dark Mode
 - 📊 Advanced Analytics Dashboard
 - 🌍 Multi-Currency Support
-- 📱 Mobile Application
 
 ---
 
