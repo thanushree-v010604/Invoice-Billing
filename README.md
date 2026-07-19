@@ -1,8 +1,14 @@
-# 🧾 Invoice & Billing Management System
+<h1 align="center">🧾 Invoice & Billing Management System</h1>
 
-A modern full-stack Invoice & Billing Management System that helps businesses create, manage, and track invoices efficiently. The application provides an intuitive interface for generating invoices, managing customer information, tracking payments, and organizing billing records with secure backend integration.
+<h3 align="center">
+Modern Full-Stack Invoice Generation & Billing Management Platform
+</h3>
 
----
+<p align="center">
+Create Invoices • Generate Bills • Manage Customers • Track Payments • Business Reports
+</p>
+
+<hr>
 
 # 📖 Project Overview
 
